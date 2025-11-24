@@ -1,37 +1,23 @@
-name: Send Monthly Report API (Scheduled)
+name: Send Mail Once
 
-# このワークフローは、UTC 2025年11月24日8時32分（日本時間 17時32分）に一度だけ実行されます。
-# 実行後は、このワークフローファイルを削除するか、無効化することを推奨します。
 on:
   schedule:
-    # 日本時間 2025年11月24日 17時32分 に実行
-    # UTC 2025年11月24日 08時32分 に相当
-    - cron: '32 8 24 11 *' # ここを '32 8 24 11 *' に変更しました
+    # 2025-11-24 17:42 JST = 2025-11-24 08:42 UTC
+    - cron: "42 8 24 11 *"
+  workflow_dispatch: # 手動実行も可能（テスト用）
 
 jobs:
-  send_api_request:
+  call_api:
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' # 手動実行は無視したいなら削除可
     steps:
-      - name: Send API Request for Monthly Report
+      - name: Call API (One-time execution)
         run: |
-          # APIキーはGitHubのSecretsに保存することを強く推奨します
-          # 設定方法については前回の回答を参照してください
-          API_KEY="${{ secrets.OUTLOOK_API_KEY }}"
-          API_ENDPOINT="https://outlook-api-v2-854259963531.asia-northeast1.run.app/send-mail"
-          TO_EMAIL="toshimichi.suzuki@rakuten.com"
-          SUBJECT="2025年11月 月次レポート 📊"
-          HTML_BODY="<p>test</p>"
-
-          # ログメッセージも時刻に合わせて修正
-          echo "日本時間 2025年11月24日 17時32分にAPIリクエストを実行します。"
-          echo "現在時刻 (UTC): $(date -u)" # UTC時刻を出力
-          echo "現在時刻 (JST): $(TZ='Asia/Tokyo' date)" # 日本時間を出力
-
-          curl -X POST "${API_ENDPOINT}" \
-            -H "X-API-Key: ${API_KEY}" \
+          curl -X POST "https://outlook-api-v2-854259963531.asia-northeast1.run.app/send-mail" \
+            -H "X-API-Key: outlook-api-key-51e10dd52e768f2154ef1971b2e08143" \
             -H "Content-Type: application/json" \
-            -d "{
-                  \"to\": [\"${TO_EMAIL}\"],
-                  \"subject\": \"${SUBJECT}\",
-                  \"html_body\": \"${HTML_BODY}\"
-                }"
+            -d '{
+              "to": ["toshimichi.suzuki@rakuten.com"],
+              "subject": "2025年11月 月次レポート 📊",
+              "html_body": "<p>test</p>"
+            }'
