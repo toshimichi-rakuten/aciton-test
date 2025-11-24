@@ -1,20 +1,13 @@
-name: Send Mail On Push (Test)
+name: Test Schedule
 
 on:
-  push:
-    branches: [ "main" ] # デフォルトブランチが main じゃなければここを変更
+  schedule:
+    - cron: "*/5 * * * *"   # 5分ごと（UTCベース）
+  workflow_dispatch:
 
 jobs:
-  call_api:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Call API (Test once on push)
-        run: |
-          curl -X POST "https://outlook-api-v2-854259963531.asia-northeast1.run.app/send-mail" \
-            -H "X-API-Key: outlook-api-key-51e10dd52e768f2154ef1971b2e08143" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "to": ["toshimichi.suzuki@rakuten.com"],
-              "subject": "2025年11月 月次レポート 📊",
-              "html_body": "<p>test</p>"
-            }'
+      - name: Echo time
+        run: date
