@@ -1,0 +1,24 @@
+name: Send Mail Every 4 Hours
+
+on:
+  schedule:
+    # 4時間ごと（UTCベース）
+    # 0時, 4時, 8時, 12時, 16時, 20時（UTC）
+    # 日本時間だと 9時, 13時, 17時, 21時, 1時, 5時
+    - cron: "0 */4 * * *"
+  workflow_dispatch: # 手動実行テストもできるようにしておく
+
+jobs:
+  call_api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Outlook mail API
+        run: |
+          curl -X POST "https://outlook-api-v2-854259963531.asia-northeast1.run.app/send-mail" \
+            -H "X-API-Key: ${{ secrets.OUTLOOK_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "to": ["toshimichi.suzuki@rakuten.com"],
+              "subject": "4時間ごとのテストメール 📊",
+              "html_body": "<p>test from GitHub Actions (every 4 hours)</p>"
+            }'
