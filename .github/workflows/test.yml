@@ -1,17 +1,14 @@
-name: Send Mail Once
+name: Send Mail On Push (Test)
 
 on:
-  schedule:
-    # 2025-11-24 17:42 JST = 2025-11-24 08:42 UTC
-    - cron: "42 8 24 11 *"
-  workflow_dispatch: # 手動実行も可能（テスト用）
+  push:
+    branches: [ "main" ] # デフォルトブランチが main じゃなければここを変更
 
 jobs:
   call_api:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' # 手動実行は無視したいなら削除可
     steps:
-      - name: Call API (One-time execution)
+      - name: Call API (Test once on push)
         run: |
           curl -X POST "https://outlook-api-v2-854259963531.asia-northeast1.run.app/send-mail" \
             -H "X-API-Key: outlook-api-key-51e10dd52e768f2154ef1971b2e08143" \
