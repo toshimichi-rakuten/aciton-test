@@ -5,7 +5,7 @@ on:
     # 4時間ごと（UTCベース）
     # 0時, 4時, 8時, 12時, 16時, 20時（UTC）
     # 日本時間だと 9時, 13時, 17時, 21時, 1時, 5時
-    - cron: "0 */4 * * *"
+    - cron: "0 */24 * * *"
   workflow_dispatch: # 手動実行テストもできるようにしておく
 
 jobs:
@@ -19,6 +19,6 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "to": ["toshimichi.suzuki@rakuten.com"],
-              "subject": "4時間ごとのテストメール 📊",
+              "subject": "24時間ごとのテストメール 📊",
               "html_body": "<p>test from GitHub Actions (every 4 hours)</p>"
             }'
