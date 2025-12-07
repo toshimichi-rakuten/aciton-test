@@ -33,7 +33,7 @@ jobs:
             --header 'Content-Type: application/json' \
             --data-raw '{
               "inputs": {
-                "prompt": "動物の可愛い画像を生成してInstagramに投稿してください"
+                "prompt": "絶景の中にいる可愛い動物"
               },
               "response_mode": "streaming",
               "user": "github-actions-bot"
