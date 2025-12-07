@@ -33,7 +33,7 @@ jobs:
             --header 'Content-Type: application/json' \
             --data-raw '{
               "inputs": {
-                "prompt": "絶景の中にいる可愛い動物"
+                "prompt": "絶景の中にいる可愛い動物。超リアルで高画質の画像"
               },
               "response_mode": "streaming",
               "user": "github-actions-bot"
