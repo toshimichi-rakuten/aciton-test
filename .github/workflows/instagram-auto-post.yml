@@ -25,44 +25,47 @@ jobs:
         env:
           DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
         run: |
-          echo "🚀 Dify ワークフローを実行中..."
+          echo "🚀 Dify ワークフローを実行中（ストリーミングモード）..."
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
+          # ストリーミングモードでDify APIを呼び出し
+          curl -N -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
             --header "Authorization: Bearer ${DIFY_API_KEY}" \
             --header 'Content-Type: application/json' \
             --data-raw '{
               "inputs": {
                 "prompt": "動物の可愛い画像を生成してInstagramに投稿してください"
               },
-              "response_mode": "blocking",
+              "response_mode": "streaming",
               "user": "github-actions-bot"
-            }')
+            }' > /tmp/dify_stream.txt 2>&1
 
-          # HTTPステータスコードを取得
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | head -n-1)
+          # ストリームの内容を表示
+          echo "📡 ストリームレスポンス:"
+          cat /tmp/dify_stream.txt
+          echo ""
 
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Response: $BODY"
+          # workflow_finishedイベントを探す
+          if grep -q "event: workflow_finished" /tmp/dify_stream.txt; then
+            echo "✅ ワークフロー完了イベントを検出"
 
-          # レスポンスをフォーマット表示
-          echo "$BODY" | python3 -m json.tool || echo "$BODY"
+            # 最後のworkflow_finishedイベントのデータを抽出
+            FINISHED_DATA=$(grep -A 1 "event: workflow_finished" /tmp/dify_stream.txt | grep "^data:" | tail -n 1 | sed 's/^data: //')
 
-          # ステータスチェック
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            STATUS=$(echo "$BODY" | python3 -c "import sys, json; print(json.load(sys.stdin)['data']['status'])" 2>/dev/null || echo "unknown")
+            # ステータスをチェック
+            STATUS=$(echo "$FINISHED_DATA" | python3 -c "import sys, json; print(json.load(sys.stdin)['data']['status'])" 2>/dev/null || echo "unknown")
 
             if [ "$STATUS" = "succeeded" ]; then
               echo "✅ Instagram投稿成功！"
               exit 0
             else
               echo "⚠️ ワークフローは実行されましたが、ステータス: $STATUS"
-              ERROR=$(echo "$BODY" | python3 -c "import sys, json; print(json.load(sys.stdin)['data'].get('error', 'No error message'))" 2>/dev/null || echo "unknown")
+              ERROR=$(echo "$FINISHED_DATA" | python3 -c "import sys, json; print(json.load(sys.stdin)['data'].get('error', 'No error message'))" 2>/dev/null || echo "unknown")
               echo "エラー: $ERROR"
               exit 1
             fi
           else
-            echo "❌ API呼び出しに失敗しました"
+            echo "❌ workflow_finishedイベントが見つかりません"
+            echo "ストリーム内容を確認してください"
             exit 1
           fi
 
