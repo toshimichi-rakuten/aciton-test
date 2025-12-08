@@ -14,7 +14,7 @@ jobs:
       - name: Wait random time (0-120 minutes)
         run: |
           # 0-7200秒（0-120分）のランダムな待機時間を生成
-          WAIT_SECONDS=$((RANDOM % 10))
+          WAIT_SECONDS=$((RANDOM % 7200))
           WAIT_MINUTES=$((WAIT_SECONDS / 60))
           echo "⏳ ランダム待機時間: ${WAIT_MINUTES}分 (${WAIT_SECONDS}秒)"
           echo "現在時刻: $(date)"
@@ -25,75 +25,80 @@ jobs:
         env:
           DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
         run: |
-          echo "🚀 Dify ワークフローを実行中（ストリーミングモード）..."
+          echo "🚀 Dify ワークフローを実行中（ブロッキングモード）..."
           echo "開始時刻: $(date)"
 
-          # ストリーミングモードでDify APIを呼び出し（タイムアウト10分）
-          # -v オプションで詳細なデバッグ情報を出力
-          timeout 600 curl -v -N -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
+          # Dify APIを呼び出し（ブロッキングモード、タイムアウト120秒）
+          RESPONSE=$(curl -s -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
             --header "Authorization: Bearer ${DIFY_API_KEY}" \
             --header 'Content-Type: application/json' \
-            --max-time 600 \
+            --max-time 120 \
             --connect-timeout 30 \
-            --keepalive-time 60 \
+            --retry 2 \
+            --retry-delay 5 \
             --data-raw '{
               "inputs": {
                 "prompt": "絶景の中にいる可愛い動物。超リアルで高画質の画像"
               },
-              "response_mode": "streaming",
+              "response_mode": "blocking",
               "user": "github-actions-bot"
-            }' > /tmp/dify_stream.txt 2>&1
+            }' 2>&1)
 
           CURL_EXIT=$?
           echo "終了時刻: $(date)"
           echo "curl exit code: $CURL_EXIT"
+          echo ""
 
-          # curlのexit codeを確認
-          if [ $CURL_EXIT -eq 28 ]; then
-            echo "❌ タイムアウトエラー（exit code 28）"
-            echo "ストリームが600秒以内に完了しませんでした"
-            exit 1
-          elif [ $CURL_EXIT -eq 124 ]; then
-            echo "❌ timeoutコマンドによる強制終了"
-            exit 1
-          elif [ $CURL_EXIT -ne 0 ]; then
-            echo "❌ curlエラー（exit code: $CURL_EXIT）"
+          # curlのexit codeをチェック
+          if [ $CURL_EXIT -ne 0 ]; then
+            echo "❌ curl実行エラー（exit code: $CURL_EXIT）"
+            if [ $CURL_EXIT -eq 28 ]; then
+              echo "タイムアウトエラー: Dify APIが120秒以内に応答しませんでした"
+            elif [ $CURL_EXIT -eq 7 ]; then
+              echo "接続エラー: Dify APIサーバーに接続できませんでした"
+            fi
+            echo ""
+            echo "レスポンス内容:"
+            echo "$RESPONSE"
             exit 1
           fi
 
-          # ストリームの内容を表示（最初の1000行のみ）
-          echo "📡 ストリームレスポンス（先頭1000行）:"
-          head -1000 /tmp/dify_stream.txt
+          echo "📡 Dify APIレスポンス:"
+          echo "$RESPONSE"
           echo ""
 
-          # ファイルサイズと行数を確認
-          FILE_SIZE=$(wc -c < /tmp/dify_stream.txt)
-          LINE_COUNT=$(wc -l < /tmp/dify_stream.txt)
-          echo "ファイルサイズ: ${FILE_SIZE} bytes, 行数: ${LINE_COUNT}"
+          # レスポンスが空でないかチェック
+          if [ -z "$RESPONSE" ]; then
+            echo "❌ レスポンスが空です"
+            exit 1
+          fi
 
-          # workflow_finishedイベントを探す
-          if grep -q "event: workflow_finished" /tmp/dify_stream.txt; then
-            echo "✅ ワークフロー完了イベントを検出"
+          # エラーレスポンスかチェック
+          if echo "$RESPONSE" | grep -q '"code".*:'; then
+            ERROR_MSG=$(echo "$RESPONSE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('message', 'Unknown error'))" 2>/dev/null || echo "API Error")
+            echo "❌ Dify APIエラー: $ERROR_MSG"
+            exit 1
+          fi
 
-            # 最後のworkflow_finishedイベントのデータを抽出
-            FINISHED_DATA=$(grep -A 1 "event: workflow_finished" /tmp/dify_stream.txt | grep "^data:" | tail -n 1 | sed 's/^data: //')
+          # ステータスをチェック
+          STATUS=$(echo "$RESPONSE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', {}).get('status', 'unknown'))" 2>/dev/null || echo "unknown")
 
-            # ステータスをチェック
-            STATUS=$(echo "$FINISHED_DATA" | python3 -c "import sys, json; print(json.load(sys.stdin)['data']['status'])" 2>/dev/null || echo "unknown")
+          echo "ワークフローステータス: $STATUS"
 
-            if [ "$STATUS" = "succeeded" ]; then
-              echo "✅ Instagram投稿成功！"
-              exit 0
-            else
-              echo "⚠️ ワークフローは実行されましたが、ステータス: $STATUS"
-              ERROR=$(echo "$FINISHED_DATA" | python3 -c "import sys, json; print(json.load(sys.stdin)['data'].get('error', 'No error message'))" 2>/dev/null || echo "unknown")
-              echo "エラー: $ERROR"
-              exit 1
-            fi
+          if [ "$STATUS" = "succeeded" ]; then
+            POST_ID=$(echo "$RESPONSE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', {}).get('outputs', {}).get('post_id', 'N/A'))" 2>/dev/null || echo "N/A")
+            ELAPSED=$(echo "$RESPONSE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', {}).get('elapsed_time', 'N/A'))" 2>/dev/null || echo "N/A")
+            echo "✅ Instagram投稿成功！"
+            echo "Post ID: $POST_ID"
+            echo "実行時間: ${ELAPSED}秒"
+            exit 0
+          elif [ "$STATUS" = "failed" ]; then
+            ERROR=$(echo "$RESPONSE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', {}).get('error', 'No error message'))" 2>/dev/null || echo "unknown")
+            echo "❌ ワークフロー失敗: $ERROR"
+            exit 1
           else
-            echo "❌ workflow_finishedイベントが見つかりません"
-            echo "ストリーム内容の最後の50行:"
-            tail -50 /tmp/dify_stream.txt
+            echo "⚠️ 不明なステータス: $STATUS"
+            echo "JSONパース失敗の可能性があります"
             exit 1
           fi
 
