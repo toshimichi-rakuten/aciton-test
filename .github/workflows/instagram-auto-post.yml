@@ -26,11 +26,16 @@ jobs:
           DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
         run: |
           echo "🚀 Dify ワークフローを実行中（ストリーミングモード）..."
+          echo "開始時刻: $(date)"
 
-          # ストリーミングモードでDify APIを呼び出し
-          curl -N -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
+          # ストリーミングモードでDify APIを呼び出し（タイムアウト10分）
+          # -v オプションで詳細なデバッグ情報を出力
+          timeout 600 curl -v -N -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
             --header "Authorization: Bearer ${DIFY_API_KEY}" \
             --header 'Content-Type: application/json' \
+            --max-time 600 \
+            --connect-timeout 30 \
+            --keepalive-time 60 \
             --data-raw '{
               "inputs": {
                 "prompt": "絶景の中にいる可愛い動物。超リアルで高画質の画像"
@@ -39,10 +44,32 @@ jobs:
               "user": "github-actions-bot"
             }' > /tmp/dify_stream.txt 2>&1
 
-          # ストリームの内容を表示
-          echo "📡 ストリームレスポンス:"
-          cat /tmp/dify_stream.txt
+          CURL_EXIT=$?
+          echo "終了時刻: $(date)"
+          echo "curl exit code: $CURL_EXIT"
+
+          # curlのexit codeを確認
+          if [ $CURL_EXIT -eq 28 ]; then
+            echo "❌ タイムアウトエラー（exit code 28）"
+            echo "ストリームが600秒以内に完了しませんでした"
+            exit 1
+          elif [ $CURL_EXIT -eq 124 ]; then
+            echo "❌ timeoutコマンドによる強制終了"
+            exit 1
+          elif [ $CURL_EXIT -ne 0 ]; then
+            echo "❌ curlエラー（exit code: $CURL_EXIT）"
+            exit 1
+          fi
+
+          # ストリームの内容を表示（最初の1000行のみ）
+          echo "📡 ストリームレスポンス（先頭1000行）:"
+          head -1000 /tmp/dify_stream.txt
           echo ""
+
+          # ファイルサイズと行数を確認
+          FILE_SIZE=$(wc -c < /tmp/dify_stream.txt)
+          LINE_COUNT=$(wc -l < /tmp/dify_stream.txt)
+          echo "ファイルサイズ: ${FILE_SIZE} bytes, 行数: ${LINE_COUNT}"
 
           # workflow_finishedイベントを探す
           if grep -q "event: workflow_finished" /tmp/dify_stream.txt; then
@@ -65,7 +92,8 @@ jobs:
             fi
           else
             echo "❌ workflow_finishedイベントが見つかりません"
-            echo "ストリーム内容を確認してください"
+            echo "ストリーム内容の最後の50行:"
+            tail -50 /tmp/dify_stream.txt
             exit 1
           fi
 
