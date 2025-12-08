@@ -14,7 +14,7 @@ jobs:
       - name: Wait random time (0-120 minutes)
         run: |
           # 0-7200秒（0-120分）のランダムな待機時間を生成
-          WAIT_SECONDS=$((RANDOM % 7200))
+          WAIT_SECONDS=$((RANDOM % 10))
           WAIT_MINUTES=$((WAIT_SECONDS / 60))
           echo "⏳ ランダム待機時間: ${WAIT_MINUTES}分 (${WAIT_SECONDS}秒)"
           echo "現在時刻: $(date)"
