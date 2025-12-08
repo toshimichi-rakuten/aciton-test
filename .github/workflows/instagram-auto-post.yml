@@ -11,12 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Wait random time (0-120 minutes)
+      - name: Wait random time (0-10 seconds)
         run: |
-          # 0-7200秒（0-120分）のランダムな待機時間を生成
+          # 0-10秒のランダムな待機時間を生成
           WAIT_SECONDS=$((RANDOM % 10))
-          WAIT_MINUTES=$((WAIT_SECONDS / 60))
-          echo "⏳ ランダム待機時間: ${WAIT_MINUTES}分 (${WAIT_SECONDS}秒)"
+          echo "⏳ ランダム待機時間: ${WAIT_SECONDS}秒"
           echo "現在時刻: $(date)"
           sleep $WAIT_SECONDS
           echo "待機終了: $(date)"
@@ -29,7 +28,8 @@ jobs:
           echo "開始時刻: $(date)"
 
           # Dify APIを呼び出し（ブロッキングモード、タイムアウト120秒）
-          RESPONSE=$(curl -s -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
+          # 一時ファイルにレスポンスを保存
+          HTTP_CODE=$(curl -w "%{http_code}" -o /tmp/dify_response.json -X POST 'https://rakuten.dify.scorobo.ai/v1/workflows/run' \
             --header "Authorization: Bearer ${DIFY_API_KEY}" \
             --header 'Content-Type: application/json' \
             --max-time 120 \
@@ -42,12 +42,22 @@ jobs:
               },
               "response_mode": "blocking",
               "user": "github-actions-bot"
-            }' 2>&1)
+            }' 2>/tmp/curl_error.txt)
+
+          RESPONSE=$(cat /tmp/dify_response.json 2>/dev/null || echo "")
 
           CURL_EXIT=$?
           echo "終了時刻: $(date)"
+          echo "HTTP Code: $HTTP_CODE"
           echo "curl exit code: $CURL_EXIT"
           echo ""
+
+          # curlのエラーログを表示
+          if [ -s /tmp/curl_error.txt ]; then
+            echo "curl error log:"
+            cat /tmp/curl_error.txt
+            echo ""
+          fi
 
           # curlのexit codeをチェック
           if [ $CURL_EXIT -ne 0 ]; then
@@ -58,6 +68,14 @@ jobs:
               echo "接続エラー: Dify APIサーバーに接続できませんでした"
             fi
             echo ""
+            echo "レスポンス内容:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          # HTTP status codeをチェック
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ HTTP エラー（Status Code: $HTTP_CODE）"
             echo "レスポンス内容:"
             echo "$RESPONSE"
             exit 1
